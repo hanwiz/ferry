@@ -11,11 +11,12 @@ const config = {
   },
   width: 1280,
   height: 720,
-//        scale: {
-//          mode: Phaser.Structs.Size.FIT,
-//          width: 1280,
-//          height: 720
-//        },
+  parent: 'ferry-app',
+  // scale: {
+  //   mode: Phaser.Structs.Size.FIT,
+  //   width: 16 * 80,   // 480 * 8 / 3 = 1280
+  //   height: 9 * 80    // 270 * 8 / 3 =  720
+  // },
 //        width: window.innerWidth * window.devicePixelRatio,
 //        height: window.innerHeight * window.devicePixelRatio,
   scene: GameScene

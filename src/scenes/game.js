@@ -11,12 +11,16 @@ import statusImg from "../assets/status.png";
 import weatherImg from "../assets/weather.png";
 import personImg from "../assets/person.png";
 import portImg from "../assets/port.png";
+import gothicImg from "../assets/gothic.png";
+import gothicBImg from "../assets/gothicB.png";
+import gothicXml from "../assets/gothic.xml";
 
 import { Ship } from "../sprites/ship";
 import { Ferry } from "../sprites/ferry";
 import { Button } from "../game-objects/button";
 import { StartStopButton } from "../game-objects/startStopButton";
 
+// global constants
 var meterPerPixel = 90 / 465; // Canal Length 90m / 465 pixel
 var knToMPS = 0.514; // 2.6556 ~~~ 8/3
 // actual speed in current resolution (720)
@@ -27,9 +31,6 @@ var haloRadius = Math.floor(10 / meterPerPixel); // 4 + 5 = 9m
 var stopRadius = Math.floor(6.5 / meterPerPixel); // 4 + 1.5 = 5.5m
 var hornRadius = Math.floor(20 / meterPerPixel);
 
-// currently not used because of flickers
-var featurePasengerText = false;
-
 // boat starting position
 var upY = 170;          // highest position
 var downY = 450;        // loweest position
@@ -37,16 +38,77 @@ var leftX = 0;          // left screen start point
 var rightX = 1000;      // screen width excluding right UI
 var adjustX = 64;       // max boat size 320 * 0.3 = 96, 48 is the minimum
 
-var timeText;           // current remaining time
-var rightBar;           // right status bar area
-
+// text location for right bar
 var staticTextX = 1014;    // right bar static x loc
 var staticResultX = 1224;  // right bar value x loc
+
+// currently not used because of flickers
+var featurePasengerText = false;
 
 // global variables
 var scenario = 1;    // current scenario
 var totalScore = 0;  // total score
 var sceneObj;        // scene object accessible
+
+var minWidth = 480;  // minimum width needed
+var minHeight = 270; // minimum Height needed
+
+// should have the ratio of 16:9
+var maxWidth = 1280; // maximum width
+var maxHeight = 720; // maximum width
+
+function resizeApp()
+{
+  // Width-height-ratio of game resolution
+  let game_ratio = (1280) / (720);
+
+  // Make div full height of browser and keep the ratio of game resolution
+  let div = document.getElementById('ferry-app');
+
+  if (window.innerWidth < minWidth || window.innerHeight < minHeight) {
+    div.style.width = minWidth + 'px';
+    div.style.height = (minWidth / game_ratio) + 'px';
+  } else if (window.innerWidth > maxWidth) {
+    if (window.innerHeight < maxHeight) {
+      div.style.width = (window.innerHeight * game_ratio) + 'px';
+      div.style.height = window.innerHeight + 'px';
+    } else {
+      div.style.width = maxWidth + 'px';
+      div.style.height = maxHeight + 'px';
+    }
+  } else if (window.innerWidth / window.innerHeight >= game_ratio) {
+    div.style.width = (window.innerHeight * game_ratio) + 'px';
+    div.style.height = window.innerHeight + 'px';
+  } else {
+    div.style.width = window.innerWidth + 'px';
+    div.style.height = (window.innerWidth / game_ratio) + 'px';
+  }
+
+  console.log(window.innerWidth, window.innerHeight, div.style.width, div.style.height);
+
+  // Check if device DPI messes up the width-height-ratio
+  // let canvas = document.getElementsByTagName('canvas')[0];
+
+  // if (canvas !== undefined) {
+  //   let dpi_w = (parseInt(div.style.width) / canvas.width);
+  //   let dpi_h = (parseInt(div.style.height) / canvas.height);
+  //   console.log("Resizing: ", div.style.width, canvas.width, div.style.height, canvas.height, dpi_w, dpi_h);
+
+  //   if (dpi_w !== dpi_h) {
+  //     let height = window.innerHeight * (dpi_w / dpi_h);
+  //     let width = height * game_ratio;
+
+  //     canvas.style.width = width + 'px';
+  //     canvas.style.height = height + 'px';
+  //   }
+  // }
+}
+
+// Add to resize event
+window.addEventListener('resize', resizeApp);
+
+// Set correct size when page loads the first time
+resizeApp();
 
 // initialize to the condition except senario
 function init(scene) {
@@ -97,7 +159,8 @@ export class GameScene extends Phaser.Scene {
     this.load.spritesheet('kayak', kayakImg, { frameWidth: 213, frameHeight: 133 });
     //this.load.svg('passengerWaiting', 'assets/passenger-waiting.svg', {width: 200, height: 30}); // , { width: 200, height: 100 });
     //this.load.svg('cartman2', 'assets/svg/cartman.svg', { width: 416, height: 388 })
-    //this.load.bitmapFont('font', 'assets/font.png', 'assets/font.fnt');
+    this.load.bitmapFont('bigFont', gothicImg, gothicXml);  // gothic white
+    this.load.bitmapFont('bigFontB', gothicBImg, gothicXml);  // nanum gothic black
 
     this.load.spritesheet('startStop', startStopImg, {
       frameWidth: 274,
@@ -137,21 +200,15 @@ export class GameScene extends Phaser.Scene {
     this.platforms.create(800, 16, 'ground').setScale(4).refreshBody();
     this.platforms.create(508, 92, 'port').setScale(0.8).refreshBody();
     this.add.image(498, 92, 'person');
-    this.peopleUpperText = this.add.text(508, 83, this.peopleUpper, {
-      fontSize: '22px',
-      fill: '#000'
-    });
+    this.peopleUpperText = this.add.bitmapText(508, 79, 'bigFontB', this.peopleUpper, 20);
 
     // lower ground
     this.platforms.create(800, 660, 'ground').setScale(4).refreshBody();
     this.platforms.create(508, 584, 'port').setScale(0.8).refreshBody();
     this.add.image(498, 584, 'person');
-    this.peopleLowerText = this.add.text(508, 575, this.peopleLower, {
-      fontSize: '22px',
-      fill: '#000'
-    });
+    this.peopleLowerText = this.add.bitmapText(508, 571, 'bigFontB', this.peopleLower, 20);
 
-    // add right bar
+    // add right status bar area
     var rect = new Phaser.Geom.Rectangle(1000, 80, 280, 800);
     this.graphics = this.add.graphics({
       fillStyle: {
@@ -260,15 +317,14 @@ export class GameScene extends Phaser.Scene {
 
     this.physics.add.collider(this.ships, this.platforms);
 
-    this.add.text(32, 24, 'AutoFerry Control Simulation Game', {
-      fontSize: '32px'
-    });
+    this.add.bitmapText(32, 16, 'bigFont', 'AutoFerry Control Simulation Game', 32);
+    this.add.bitmapText(staticTextX, 16, 'bigFont', 'Scenario', 32);
+    this.scenarioText = this.add.bitmapText(staticResultX - 40, 16, 'bigFont', scenario, 32);
 
-    this.add.text(staticTextX, 24, 'Scenario', { fontSize: '32px' });
-    this.scenarioText = this.add.text(staticResultX - 40, 24, scenario, { fontSize: '32px' });
-
+    // Camera and Thrusters
     this.addStaticText(staticTextX, 100, "Camera", this);
     this.add.sprite(staticResultX, 110, 'statusLight', 0).setScale(0.7, 0.7).setDepth(1);
+
     this.addStaticText(staticTextX, 160, "Thruster A", this);
     this.thrusterA = this.add.sprite(staticResultX, 170, 'statusLight', 0).setScale(0.7, 0.7);
     this.thrusterA.setDepth(1);
@@ -281,49 +337,39 @@ export class GameScene extends Phaser.Scene {
     this.addStaticText(staticTextX, 256, "Thruster D", this);
     this.thrusterD = this.add.sprite(staticResultX, 266, 'statusLight', 0).setScale(0.7, 0.7);;
     this.thrusterD.setDepth(1);
+
     this.addStaticText(staticTextX, 320, "Ferry Speed", this);
-    this.speedText = this.add.text(staticResultX - 30, 320, '0 kn', {
-      fontSize: '24px',
-      fill: '#000'
-    });
-    this.speedText.setDepth(1);
+    this.speedText = this.add.bitmapText(staticResultX - 30, 320 - 6, 'bigFontB', '0 kn', 24).setDepth(1);
+
     this.addStaticText(staticTextX, 352, 'Passenger #', this);
-    this.loadText = this.add.text(staticResultX - 30, 352, '0', {
-      fontSize: '24px',
-      fill: '#000'
-    });
-    this.loadText.setDepth(1);
+    this.loadText = this.add.bitmapText(staticResultX - 30, 352 - 6, 'bigFontB', '0', 24).setDepth(1);
+
     this.addStaticText(staticTextX, 384, 'Wind Speed', this);
     // remove it because of flickers...-_-
     //passengerText = this.add.bitmapText(ferry.x - 5, ferry.y - 4, 'font', '0', 10 ); // { fontSize: '18px', fill: '#fff' });
 
     if (scenario === 4) this.windSpeed = 20;
-    this.windSpeedText = this.add.text(staticResultX - 30, 384, this.windSpeed + ' kn', {
-      fontSize: '24px',
-      fill: '#000'
-    });
-    this.windSpeedText.setDepth(1);
-    this.weatherText = this.add.text(staticTextX, 416, 'Weather:', {
-      fontSize: '24px',
-      fill: '#000'
-    });
-    this.weatherText.setDepth(1);
+    this.windSpeedText = this.add.bitmapText(staticResultX - 30, 384 - 6, 'bigFontB', this.windSpeed + ' kn', 24 ).setDepth(1);
+
+    this.addStaticText(staticTextX, 416, 'Weather:', this);
     this.weatherImage = this.add.image(1180, 464, 'weather').setDepth(1);
-    this.addStaticText(staticTextX, 538, "Emergency Status:", this);
 
     // emergency from passengers
+    this.addStaticText(staticTextX, 538, "Emergency Status:", this);
     this.emergency = this.add.sprite(staticResultX - 80, 585, 'statusLight', 0).setScale(0.7, 0.7).setDepth(1);
     this.addStaticText(staticTextX, 610, "Communications:", this);
     this.emergencyText = this.add.text(staticTextX, 663, "", { fontSize: '24px', fill: '#000' });
     this.emergencyText.setDepth(1);
     this.graphics.strokeRect(staticTextX - 5, 645, 260, 60);
 
-    // big message in the center
-    this.msgCenter = this.add.text(300, 290, "Scenario " + scenario, { fontSize: '64px',  fill: '#000' });
+    // big message in the center - need black font
+    this.msgCenter = this.add.bitmapText(300, 282, 'bigFontB', "Scenario " + scenario, 64);
 
     this.cameras.main.backgroundColor.setTo(128, 128, 128);
     this.physics.add.collider(this.ferry, this.ships, this.hitShip, null, this);
-    this.timeText = this.add.text(800, 24, '5:00', { fontSize: '32px' });
+
+    // current remaining time
+    this.timeText = this.add.bitmapText(800, 16, 'bigFont', '5:00', 32);
 
     // reset camera effects
     this.cameras.main.resetFX();
@@ -661,10 +707,7 @@ export class GameScene extends Phaser.Scene {
 
   // Add static text which doesn't change at all
   addStaticText(x, y, msg, scene) {
-    var variable = scene.add.text(x, y, msg, {
-      fontSize: '24px',
-      fill: '#000'
-    });
+    var variable = scene.add.bitmapText(x, y-6, 'bigFontB', msg, 24);
     variable.setDepth(1);
   }
 

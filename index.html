@@ -1,28 +1,96 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      background-color: gray;
-        }
+<!doctype html>
+<html lang="en">
 
-      #ferry-app {
-        margin: 0 auto;
-        /* display: flex;
-        flex-direction: column; */
-        justify-content: center;
-      }
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <title>AutoFerry Control Simulation Game</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+  <link rel="stylesheet" type="text/css" href="index.css">
+</head>
 
-      canvas {
-        width: 100%;
-        height: 100%;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="ferry-app"></div>
-  </body>
+<body>
+<div class="container">
+  <h3>Welcome!</h3>
+  <p>You are remotely monitoring and controlling the AutoFerry in a shore control center (SCC). Your task is to safely transport as many people as possible form one docking station across the channel. The max capacity is 12 people at a time. You decide when the ferry should start. The ferry will move in a straight line across the channel and automatically stop on the other side. The circle around the ferry indicates the status of the anti-collision system. It is green when it functions, yellow when something is detected and red when the system is impaired. The anti-collision system will make the ferry stop when an object is detected within the range of 1.5 meters from the ferry.
+  </p>
+  <p>
+    You can see the status of the technical system on the right side of the interface, shown below. You have three different options for controlling the ferry, and three options for notifying the passengers and surroundings. A short description of the different options follows:
+  </p>
+  <div class="p-4">
+    <img class="responsive" src="assets/game.png"/>
+  </div>
+  <OL>
+    <LI>
+      <strong>Start/Stop</strong>: by pushing this button the ferry immediately stops, push the button again for starting the ferry, it will automatically reach its standard speed of 3kn.
+    </LI>
+    <LI>
+      <strong>Speed up</strong>: increase its speed by 1 kn per push
+    </LI>
+    <LI>
+       <strong>Speed down</strong>: decreases the speed by 1kn per push
+    </LI>
+    <LI>
+       <strong>Signal the surroundings</strong> by sound from an air horn. Length of blast depending on how long you push the button.
+    </LI>
+    <LI>
+       <strong>Communicate to passenger</strong>: Push this button and record your message
+    </LI>
+    <LI>
+       <strong>Maintenance needed!</strong> Push this button to notify the maintenance crew of needed action. The ferry will stop at the next dock for repair, and passengers will be automatically notified that the ferry is out of service.
+    </LI>
+  </OL>
+
+  <P>
+    Control rules:
+  </P>
+  <UL>
+    <LI>
+      Yield for boats and kayakers from the right! (compliance with COLREG rules)
+    </LI>
+    <LI>
+      Stop ferry if the anti-collision system fails (if the circle around the ferry turns red).
+    </LI>
+    <LI>
+      If necessary, warn other boats by sound signal. The circle around the boat turns yellow when it detects objects 5m from the ferry.
+    </LI>
+  </UL>
+    <P>
+      Rules for startup:
+    </P>
+  <UL>
+    <LI>
+      Do not start the ferry if the load exceeds 12 passengers
+    </LI>
+    <LI>
+      Do not start the ferry if the wind speed is above 15kn
+    </LI>
+  </UL>
+    <p>
+      In case of technical failures and impaired systems:
+    </p>
+  <UL>
+    <LI>
+      The ferry shall not operate with an impaired anti-collision system
+    </LI>
+    <LI>
+      The ferry shall not operate with two or more impaired thrusters (yellow status).
+    </LI>
+    <LI>
+      The ferry shall not operate with a failed thruster (red status)
+    </LI>
+  </UL>
+    <p>
+      In these cases <u>notify the maintenance crew and <strong>stop</strong> at next docking station</u>.
+    </p>
+  <UL>
+    <LI>
+      The ferry can operate with one impaired thruster (yellow status). In this case, notify the maintenance crew.
+    </LI>
+  </UL>
+
+  <button class="btn btn-primary float-right" onclick="location.href='ferry.html'">Start Simulation</button>
+</div>
+</body>
+
 </html>

@@ -1,0 +1,9 @@
+body {
+  font-size: 16px;
+  margin: 32px 0 100px 0;
+}
+
+.responsive {
+  max-width: 100%;
+  height: auto;
+}

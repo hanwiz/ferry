@@ -14,6 +14,7 @@ import portImg from "../assets/port.png";
 
 import { Ship } from "../sprites/ship";
 import { Ferry } from "../sprites/ferry";
+import { Button } from "../game-objects/button";
 
 var meterPerPixel = 90 / 465; // Canal Length 90m / 465 pixel
 var knToMPS = 0.514; // 2.6556 ~~~ 8/3
@@ -25,38 +26,33 @@ var haloRadius = Math.floor(10 / meterPerPixel); // 4 + 5 = 9m
 var stopRadius = Math.floor(6.5 / meterPerPixel); // 4 + 1.5 = 5.5m
 var hornRadius = Math.floor(20 / meterPerPixel);
 
-var shipAccel = 0.2;    // ship accel
-
 // currently not used because of flickers
 var featurePasengerText = false;
 
 // boat starting position
-var upY = 170; // 40
-var downY = 450; // 290
-var leftX = 0;         // left screen start point
-var rightX = 1000; // screen width without right UI
-var adjustX = 64;   // max boat size 320 * 0.3 = 96, 48 is the minimum
+var upY = 170;          // highest position
+var downY = 450;        // loweest position
+var leftX = 0;          // left screen start point
+var rightX = 1000;      // screen width excluding right UI
+var adjustX = 64;       // max boat size 320 * 0.3 = 96, 48 is the minimum
 
-var timeText;         // current remaining time
-var rightBar;          // right status bar area
+var timeText;           // current remaining time
+var rightBar;           // right status bar area
 
-var staticTextX = 1014;     // right bar static x loc
+var staticTextX = 1014;    // right bar static x loc
 var staticResultX = 1224;  // right bar value x loc
 
 // global variables
 var scenario = 1;    // current scenario
-var totalScore = 0; // total score
-var sceneObj;         // scene object accessible
+var totalScore = 0;  // total score
+var sceneObj;        // scene object accessible
 
 // initialize to the condition except senario
 function init(scene) {
-  scene.timeLeft = 300;           // 5 minutes
-
-  // ferry init
-  scene.ferryLoad = 0;           // ferry load
+  scene.timeLeft = 300; // 5 minutes
 
   scene.haloStatus = 0; // 0 green 1 yellow 2 red
-  scene.atDock = true; // ferry is at port
+  scene.atDock = true;  // ferry is at port
   scene.loading = true; // false when it is arrived at the other ports
   scene.peopleLower = 20;
   scene.peopleUpper = 20;
@@ -177,59 +173,19 @@ export class GameScene extends Phaser.Scene {
 
     // create buttons and assign
     this.startStop = this.add.sprite(200, 660, 'startStop', 0);
-    this.speedUp = this.add.sprite(500, 640, 'speedUp', 0).setScale(0.5, 0.5);
-    this.speedDown = this.add.sprite(500, 680, 'speedDown', 0).setScale(0.5, 0.5);
-    this.speaker = this.add.sprite(700, 660, 'buttons', 3);
-    this.mic = this.add.image(800, 660, 'buttons', 0);
-    this.tools = this.add.image(900, 660, 'buttons', 6);
+    this.speedUp = new Button(this, 500, 640, 'speedUp', 0, 1, 2, () => this.speedUpPushedDown(this)).setScale(0.5, 0.5);
+    this.speedDown = new Button(this, 500, 680, 'speedDown', 0, 1, 2, () => this.speedUpPushedDown(this)).setScale(0.5, 0.5);
+    this.speaker = new Button(this, 700, 660, 'buttons', 3, 4, 5, () => this.speakerButtonPushedDown(this), () => this.speakerButtonPushedUp(this));
+    this.mic = new Button(this, 800, 660, 'buttons', 0, 1, 2);
+    this.tools = new Button(this, 900, 660, 'buttons', 6, 7, 8, () => this.toolsButtonPushedDown());
 
     this.startStop.setInteractive({
         useHandCursor: true
       })
       .on('pointerdown', () => this.startStopPushedDown(this))
-      .on('pointerover', () => this.startStop.setFrame((this.speed === 0) ? 1 : 2))
-      .on('pointerout', () => this.startStop.setFrame((this.speed === 0) ? 0 : 3))
+      .on('pointerover', () => this.startStop.setFrame((this.ferry.speed === 0) ? 1 : 2))
+      .on('pointerout', () => this.startStop.setFrame((this.ferry.speed === 0) ? 0 : 3))
       .on('pointerup', () => this.startStopPushedUp(this));
-
-    this.speedUp.setInteractive({
-        useHandCursor: true
-      })
-      .on('pointerdown', () => this.speedUpPushedDown(this))
-      .on('pointerover', () => this.speedUp.setFrame(1))
-      .on('pointerout', () => this.speedUp.setFrame(0))
-      .on('pointerup', () => this.speedButtonPushedUp(this.speedUp));
-
-    this.speedDown.setInteractive({
-        useHandCursor: true
-      })
-      .on('pointerdown', () => this.speedDownPushedDown(this))
-      .on('pointerover', () => this.speedDown.setFrame(1))
-      .on('pointerout', () => this.speedDown.setFrame(0))
-      .on('pointerup', () => this.speedButtonPushedUp(this.speedDown));
-
-    this.speaker.setInteractive({
-        useHandCursor: true
-      })
-      .on('pointerdown', () => this.speakerButtonPushedDown(this.speaker))
-      .on('pointerover', () => this.speaker.setFrame(4))
-      .on('pointerout', () => this.speaker.setFrame(3))
-      .on('pointerup', () => this.speakerButtonPushedUp(this.speaker));
-
-    this.mic.setInteractive({
-        useHandCursor: true
-      })
-      .on('pointerdown', () => this.mic.setFrame(2))
-      .on('pointerover', () => this.mic.setFrame(1))
-      .on('pointerout', () => this.mic.setFrame(0))
-      .on('pointerup', () => this.mic.setFrame(1)); // pointerout but still down(?)
-
-    this.tools.setInteractive({
-        useHandCursor: true
-      })
-      .on('pointerdown', () => this.toolsButtonPushedDown(this.tools))
-      .on('pointerover', () => this.tools.setFrame(7))
-      .on('pointerout', () => this.tools.setFrame(6))
-      .on('pointerup', () => this.toolsButtonPushedUp(this.tools));
 
     this.ferry = new Ferry(this, 508, 548, 'ferry');
     this.physics.add.collider(this.ferry, this.platforms, this.hitPlatform, null, this);
@@ -373,9 +329,6 @@ export class GameScene extends Phaser.Scene {
 
     this.cameras.main.backgroundColor.setTo(128, 128, 128);
     this.physics.add.collider(this.ferry, this.ships, this.hitShip, null, this);
-  //  this.physics.add.collider(ferry, shipsLeft, hitShip, null, this);
-  //  this.physics.add.collider(ferry, kayaks, hitShip, null, this);
-  //  this.physics.add.collider(ferry, kayaksLeft, hitShip, null, this);
     this.timeText = this.add.text(800, 24, '5:00', { fontSize: '32px' });
 
     // reset camera effects
@@ -493,8 +446,8 @@ export class GameScene extends Phaser.Scene {
     if (this.atDock && this.maintenanceCalled && !this.gameover) {
       // check properly or not properly
       if (this.maintenanceNeeded) {
-        this.score += this.ferryLoad / 50;
-        this.ferryLoad = 0;
+        this.score += this.ferry.load / 50;
+        this.ferry.load = 0;
         this.gameOver(4, this);  // good job!!!
       } else
         this.gameOver(5, this); // no needed maintenance...(?)
@@ -503,15 +456,15 @@ export class GameScene extends Phaser.Scene {
     // dock loading/unloading simulation
     if (this.atDock && timeElapsed500 != this.preTimeElapsed500) {
       this.preTimeElapsed500 = timeElapsed500;
-      //console.log("Loading", this.loading, this.ferryLoad, this.ferryDirection, this.peopleLower);
+      //console.log("Loading", this.loading, this.ferry.load, this.ferryDirection, this.peopleLower);
 
       if (this.loading == false) {
-        if (this.ferryLoad > 0) {
-          this.ferryLoad -= 50;
+        if (this.ferry.load > 0) {
+          this.ferry.load -= 50;
           this.score++;
         }
 
-        if (this.ferryLoad == 0) {
+        if (this.ferry.load == 0) {
           this.loading = true;
           if (this.score === 40) {
             totalScore += this.score;
@@ -519,27 +472,27 @@ export class GameScene extends Phaser.Scene {
           }
         }
       } else {
-        if (this.ferry.ferryDirection === -1 && this.ferryLoad < 600 && this.peopleLower > 0) {
+        if (this.ferry.ferryDirection === -1 && this.ferry.load < 600 && this.peopleLower > 0) {
           this.peopleLower--;
           this.peopleLowerText.setText(this.peopleLower);
-          this.ferryLoad += 50;
+          this.ferry.load += 50;
         }
-        if (this.ferry.ferryDirection === 1 && this.ferryLoad < 600 && this.peopleUpper > 0) {
+        if (this.ferry.ferryDirection === 1 && this.ferry.load < 600 && this.peopleUpper > 0) {
           this.peopleUpper--;
           this.peopleUpperText.setText(this.peopleUpper);
-          this.ferryLoad += 50;
+          this.ferry.load += 50;
         }
       }
 
-      this.loadText.setText(this.ferryLoad / 50);
+      this.loadText.setText(this.ferry.load / 50);
 
       if (featurePasengerText) {
-        if (this.ferryLoad >= 500) { // adjust location of text for two digits
+        if (this.ferry.load >= 500) { // adjust location of text for two digits
           this.passengerText.x = this.ferry.x - 10;
         } else {
           this.passengerText.x = this.ferry.x - 5;
         }
-        this.passengerText.setText(this.ferryLoad / 50);
+        this.passengerText.setText(this.ferry.load / 50);
       }
     }
     // move the passenger text with ferry
@@ -584,7 +537,7 @@ export class GameScene extends Phaser.Scene {
       }
 
       // speaker warning
-      sceneObj.processTasks(child, circleHorn, rectBounds, delta);
+      child.processTasks(child, circleHorn, rectBounds, delta, speedFactor, stopRadius, sceneObj.ferry, sceneObj.speakerWarning);
 
       // when speedRatio changed...this affects all the boats speed
       child.setVelocityX(child.shipSpeed * speedRatio);
@@ -632,6 +585,7 @@ export class GameScene extends Phaser.Scene {
       }
       //console.log(obj,  obj.body.moves);
 
+      // ACS stop activated
       if (Phaser.Geom.Intersects.CircleToRectangle(circle2, rect)) {
         this.haloStatus = 2;
         this.setSpeed(0); // stop the ferry
@@ -671,41 +625,6 @@ export class GameScene extends Phaser.Scene {
     this.occupied[(y-upY) / 35] = null;
   }
 
-  // speaker warning activating...
-  processTasks(child, circleHorn, rectBounds, delta) {
-    if (this.speakerWarning && this.ferry.ferryDirection * child.shipDirection === -1 && Phaser.Geom.Intersects.CircleToRectangle(circleHorn, rectBounds)) {
-      //child.yieldToFerry = true;
-      //child.body.moves = false;
-
-      console.log("Speaker debug", child, child.timeSlowDown, child.shipSpeed, delta, speedFactor);
-
-      // only collision possible boats affected by speaker button
-      if ((this.ferry.ferryDirection === -1 && child.y - child.displayHeight / 2 < this.ferry.y + this.ferry.displayHeight / 2) || // ferry down to up
-        (this.ferry.ferryDirection === 1 && child.y + child.displayHeight / 2 > this.ferry.y - this.ferry.displayHeight / 2)) { // ferry up to down
-        // left to right
-        if ((child.shipDirection === 1 && child.x + child.displayWidth / 2 < this.ferry.x - stopRadius / 2) || // ship left to right
-          (child.shipDirection === -1 && child.x - child.displayWidth / 2 > this.ferry.x + stopRadius / 2)) { // ship right to left
-          child.timeSlowDown -= delta * speedFactor;
-
-          while (child.timeSlowDown <= 0) {
-            child.timeSlowDown += 100;
-            child.shipSpeed = (Math.abs(child.shipSpeed) <= shipAccel) ? 0 : child.shipSpeed - shipAccel * child.shipDirection;
-          }
-        }
-      }
-      //console.log(child.shipSpeed);
-    } else if (!child.stoppedByACS) {
-      //child.body.moves = true;
-      child.timeSlowDown -= delta * speedFactor;
-      while (child.timeSlowDown <= 0) {
-        child.timeSlowDown += 100;
-        if (Math.abs(child.shipSpeed) < Math.abs(child.currentSpeed)) { // before
-          child.shipSpeed += shipAccel * child.shipDirection;
-        }
-      }
-    }
-  }
-
   // display the currently reamined time
   setTime(timeElasped) {
     this.timeLeft = 300 - timeElasped;
@@ -718,59 +637,37 @@ export class GameScene extends Phaser.Scene {
   }
 
   startStopPushedDown(obj) {
+    // we might need an active state for startStop button
     obj.startStop.setFrame((this.ferry.speed === 0) ? 2 : 1);
-    this.setSpeed((this.ferry.speed === 0) ? this.ferry.ferryDirection * this.ferry.ferryStartSpeed : 0, obj);
+    this.setSpeed((this.ferry.speed === 0) ? this.ferry.ferryDirection * this.ferry.ferryStartSpeed : 0, obj.startStop);
   }
 
   startStopPushedUp(obj) {
-    setTimeout(function () {
-      obj.startStop.setFrame((this.speed === 0) ? 0 : 3);
-    }, 200);
+    // setTimeout(function () {
+    //   obj.startStop.setFrame((this.ferry.speed === 0) ? 1 : 2); // hover state
+    // }, 200);
   }
 
   speedUpPushedDown(obj) {
-    //console.log(this, startStop, obj);
-    obj.speedUp.setFrame(2);
     //console.log("Button Active", obj.speed, this.speed);
     this.setSpeed((Math.abs(this.ferry.speed) >= this.ferry.ferryMaxSpeed) ? this.ferry.ferryMaxSpeed * this.ferry.ferryDirection : this.ferry.speed + this.ferry.ferryDirection, obj);
   }
 
   speedDownPushedDown(obj) {
-    //console.log(this, startStop, obj);
-    obj.speedDown.setFrame(2);
     //console.log("Button Active", obj.speed, this.speed);
     this.setSpeed((this.ferry.speed === 0) ? 0 : this.ferry.speed - this.ferry.ferryDirection, obj);
   }
 
-  speedButtonPushedUp(obj) {
-    setTimeout(function () {
-      obj.setFrame(0);
-    }, 200);
-    //obj.startStop.setFrame(0);
-    //console.log("Button Inactive");
-  }
-
   speakerButtonPushedDown(obj) {
-    obj.setFrame(5);
     this.speakerWarning = true;
   }
 
   speakerButtonPushedUp(obj) {
     this.speakerWarning = false;
-    setTimeout(function () {
-      obj.setFrame(3);
-    }, 200);
   }
 
   toolsButtonPushedDown(obj) {
-    obj.setFrame(8);
     this.maintenanceCalled = true;
-  }
-
-  toolsButtonPushedUp(obj) {
-    setTimeout(function () {
-      obj.setFrame(6);
-    }, 200);
   }
 
   // Add static text which doesn't change at all
@@ -782,7 +679,6 @@ export class GameScene extends Phaser.Scene {
     variable.setDepth(1);
   }
 
-
   // hit other side dock
   hitPlatform(ferry) {
     //this.physics.pause();
@@ -791,8 +687,8 @@ export class GameScene extends Phaser.Scene {
     this.setSpeed(0, this);
 
     this.atDock = true;
-    if (this.ferryLoad > 0) this.loading = false;
-    // decreasea the load and increase the load
+    if (this.ferry.load > 0) this.loading = false;
+
     this.cross++;
   }
 
@@ -883,21 +779,24 @@ export class GameScene extends Phaser.Scene {
   }
 
   // set the speed of the ferry
-  setSpeed(speed) {
+  setSpeed(speed, obj) {
     if (this.ferry.speed === 0 && speed !== 0) {
       this.atDock = false;
     }
 
     this.ferry.speed = speed;
     this.speedText.setText(Math.abs(speed) + " kn");
-    this.startStop.setFrame((speed === 0) ? 0 : 3);
+    if (obj !== this.startStop)
+      this.startStop.setFrame((speed === 0) ? 0 : 3);
 
+    // process starting with strong wind
     if (speed !== 0 && this.windSpeed > 15 && !this.falseStartWind) {
       this.falseStartWind = true;
       this.timeFalseStart = this.timePassed;
       console.log("Start with Strong Wind...");
     }
 
+    // if emergency stop requested
     if (speed === 0 && this.stopRequested) {
       this.stopRequested = false;
       this.emergency.setFrame(0);

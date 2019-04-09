@@ -125,9 +125,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
-    init(this);                   // initialize... do we need this?
-    sceneObj = this;  // setting sceneObj for later use by outside
+    init(this);       // initialize...
+    sceneObj = this;  // setting sceneObj for later use by outside or event function
 
+    // add channel background image
     this.add.image(500, 328, 'channel'); // 727 * 371
 
     this.platforms = this.physics.add.staticGroup();
@@ -173,7 +174,6 @@ export class GameScene extends Phaser.Scene {
     });
 
     // create buttons and assign
-    //this.startStop = this.add.sprite(200, 660, 'startStop', 0);
     this.startStop = new StartStopButton(this, 200, 660, 'startStop', 0, () => this.startStopPushedDown(this));
     this.speedUp = new Button(this, 500, 640, 'speedUp', 0, 1, 2, () => this.speedUpPushedDown(this)).setScale(0.5, 0.5);
     this.speedDown = new Button(this, 500, 680, 'speedDown', 0, 1, 2, () => this.speedDownPushedDown(this)).setScale(0.5, 0.5);
@@ -336,12 +336,15 @@ export class GameScene extends Phaser.Scene {
     let timeElapsed500 = Math.floor(this.timePassed / 500); // 0.5 sec interval
     this.timeVelocityChange -= delta * speedFactor;
 
+    // display remained time
     this.setTime(timeElapsed);
 
+    // remove scenario message at the beginning
     if (timeElapsed === 2) {
       this.msgCenter.setText("");
     }
 
+    // process scenarios
     if (!this.scenarioActivated) {
       if (scenario === 5 && this.cross === 1 && this.ferry.y >= upY + 35 * 2) {
         this.scenarioActivated = true;

@@ -15,6 +15,7 @@ import portImg from "../assets/port.png";
 import { Ship } from "../sprites/ship";
 import { Ferry } from "../sprites/ferry";
 import { Button } from "../game-objects/button";
+import { StartStopButton } from "../game-objects/startStopButton";
 
 var meterPerPixel = 90 / 465; // Canal Length 90m / 465 pixel
 var knToMPS = 0.514; // 2.6556 ~~~ 8/3
@@ -172,21 +173,15 @@ export class GameScene extends Phaser.Scene {
     });
 
     // create buttons and assign
-    this.startStop = this.add.sprite(200, 660, 'startStop', 0);
+    //this.startStop = this.add.sprite(200, 660, 'startStop', 0);
+    this.startStop = new StartStopButton(this, 200, 660, 'startStop', 0, () => this.startStopPushedDown(this));
     this.speedUp = new Button(this, 500, 640, 'speedUp', 0, 1, 2, () => this.speedUpPushedDown(this)).setScale(0.5, 0.5);
-    this.speedDown = new Button(this, 500, 680, 'speedDown', 0, 1, 2, () => this.speedUpPushedDown(this)).setScale(0.5, 0.5);
+    this.speedDown = new Button(this, 500, 680, 'speedDown', 0, 1, 2, () => this.speedDownPushedDown(this)).setScale(0.5, 0.5);
     this.speaker = new Button(this, 700, 660, 'buttons', 3, 4, 5, () => this.speakerButtonPushedDown(this), () => this.speakerButtonPushedUp(this));
     this.mic = new Button(this, 800, 660, 'buttons', 0, 1, 2);
-    this.tools = new Button(this, 900, 660, 'buttons', 6, 7, 8, () => this.toolsButtonPushedDown());
+    this.tools = new Button(this, 900, 660, 'buttons', 6, 7, 8, () => this.toolsButtonPushedDown(this));
 
-    this.startStop.setInteractive({
-        useHandCursor: true
-      })
-      .on('pointerdown', () => this.startStopPushedDown(this))
-      .on('pointerover', () => this.startStop.setFrame((this.ferry.speed === 0) ? 1 : 2))
-      .on('pointerout', () => this.startStop.setFrame((this.ferry.speed === 0) ? 0 : 3))
-      .on('pointerup', () => this.startStopPushedUp(this));
-
+    // create ferry and setup with platforms
     this.ferry = new Ferry(this, 508, 548, 'ferry');
     this.physics.add.collider(this.ferry, this.platforms, this.hitPlatform, null, this);
 
@@ -212,8 +207,7 @@ export class GameScene extends Phaser.Scene {
       if (event.keyCode === 32) { // space
         sceneObj.setSpeed((sceneObj.ferry.speed === 0) ? sceneObj.ferry.ferryDirection * sceneObj.ferry.ferryStartSpeed : 0, sceneObj);
       }
-    }
-    );
+    });
 
     // create ships - 4 ships and 5 kayaks
     this.ships = this.physics.add.group();
@@ -637,15 +631,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   startStopPushedDown(obj) {
-    // we might need an active state for startStop button
-    obj.startStop.setFrame((this.ferry.speed === 0) ? 2 : 1);
     this.setSpeed((this.ferry.speed === 0) ? this.ferry.ferryDirection * this.ferry.ferryStartSpeed : 0, obj.startStop);
-  }
-
-  startStopPushedUp(obj) {
-    // setTimeout(function () {
-    //   obj.startStop.setFrame((this.ferry.speed === 0) ? 1 : 2); // hover state
-    // }, 200);
   }
 
   speedUpPushedDown(obj) {
@@ -785,6 +771,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.ferry.speed = speed;
+
+    // change speed related UI
     this.speedText.setText(Math.abs(speed) + " kn");
     if (obj !== this.startStop)
       this.startStop.setFrame((speed === 0) ? 0 : 3);

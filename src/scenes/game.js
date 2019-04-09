@@ -358,7 +358,7 @@ export class GameScene extends Phaser.Scene {
     this.addStaticText(staticTextX, 538, "Emergency Status:", this);
     this.emergency = this.add.sprite(staticResultX - 80, 585, 'statusLight', 0).setScale(0.7, 0.7).setDepth(1);
     this.addStaticText(staticTextX, 610, "Communications:", this);
-    this.emergencyText = this.add.text(staticTextX, 663, "", { fontSize: '24px', fill: '#000' });
+    this.emergencyText = this.add.bitmapText(staticTextX, 663 - 6, "bigFontB", "", 24);
     this.emergencyText.setDepth(1);
     this.graphics.strokeRect(staticTextX - 5, 645, 260, 60);
 

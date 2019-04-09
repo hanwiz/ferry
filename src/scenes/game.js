@@ -1,0 +1,909 @@
+import channelImg from "../assets/channel2.png";
+import platformImg from "../assets/platform.png";
+import ferryImg from "../assets/ferry.png";
+import boatImg from "../assets/boat.png";
+import kayakImg from "../assets/kayak.png";
+import startStopImg from "../assets/startStop.png";
+import speedUpImg from "../assets/speedUp.png";
+import speedDownImg from "../assets/speedDown.png";
+import buttonsImg from "../assets/buttons.png";
+import statusImg from "../assets/status.png";
+import weatherImg from "../assets/weather.png";
+import personImg from "../assets/person.png";
+import portImg from "../assets/port.png";
+
+import { Ship } from "../sprites/ship";
+import { Ferry } from "../sprites/ferry";
+
+var meterPerPixel = 90 / 465; // Canal Length 90m / 465 pixel
+var knToMPS = 0.514; // 2.6556 ~~~ 8/3
+// actual speed in current resolution (720)
+var speedRatioOriginal = knToMPS / meterPerPixel; // 2.6556 ~~~~ 8/3
+var speedFactor = 1;
+var speedRatio = speedRatioOriginal * speedFactor; // 2.6556 ~~~~ 8/3 // for debugging
+var haloRadius = Math.floor(10 / meterPerPixel); // 4 + 5 = 9m
+var stopRadius = Math.floor(6.5 / meterPerPixel); // 4 + 1.5 = 5.5m
+var hornRadius = Math.floor(20 / meterPerPixel);
+
+var shipAccel = 0.2;    // ship accel
+
+// currently not used because of flickers
+var featurePasengerText = false;
+
+// boat starting position
+var upY = 170; // 40
+var downY = 450; // 290
+var leftX = 0;         // left screen start point
+var rightX = 1000; // screen width without right UI
+var adjustX = 64;   // max boat size 320 * 0.3 = 96, 48 is the minimum
+
+var timeText;         // current remaining time
+var rightBar;          // right status bar area
+
+var staticTextX = 1014;     // right bar static x loc
+var staticResultX = 1224;  // right bar value x loc
+
+// global variables
+var scenario = 1;    // current scenario
+var totalScore = 0; // total score
+var sceneObj;         // scene object accessible
+
+// initialize to the condition except senario
+function init(scene) {
+  scene.timeLeft = 300;           // 5 minutes
+
+  // ferry init
+  scene.ferryLoad = 0;           // ferry load
+
+  scene.haloStatus = 0; // 0 green 1 yellow 2 red
+  scene.atDock = true; // ferry is at port
+  scene.loading = true; // false when it is arrived at the other ports
+  scene.peopleLower = 20;
+  scene.peopleUpper = 20;
+
+  scene.score = 0;
+  scene.cross = 0;
+  scene.scenarioActivated = false;
+  scene.stopRequested = false;
+
+  // space 0 to 10 between 250 and 450 with size of 20
+  scene.occupied = {};
+  for(var i=0;i<= 11;i++) {
+    scene.occupied[i] = null;
+  }
+  // ship init
+  // canoe init
+  scene.gameover = false;
+  scene.maintenanceCalled = false;
+  scene.maintenanceNeeded = false;
+  scene.ACSFailed = false;
+  scene.windSpeed = 1;
+  scene.falseStartWind  = false;
+  scene.engineFailed = 0;
+  scene.thrusterFailed = false;
+  scene.timePassed = 0;
+  scene.totalBoats = 9;
+
+  scene.preTimeElapsed500 = -1;
+  scene.timeVelocityChange = 100;
+
+  // warning flag...
+  scene.speakerWarning = false;
+}
+
+export class GameScene extends Phaser.Scene {
+  preload() {
+    this.load.image('channel', channelImg);
+    this.load.image('ground', platformImg);
+    this.load.image('ferry', ferryImg);
+    this.load.spritesheet('boat', boatImg, { frameWidth: 320, frameHeight: 118 });
+    this.load.spritesheet('kayak', kayakImg, { frameWidth: 213, frameHeight: 133 });
+    //this.load.svg('passengerWaiting', 'assets/passenger-waiting.svg', {width: 200, height: 30}); // , { width: 200, height: 100 });
+    //this.load.svg('cartman2', 'assets/svg/cartman.svg', { width: 416, height: 388 })
+    //this.load.bitmapFont('font', 'assets/font.png', 'assets/font.fnt');
+
+    this.load.spritesheet('startStop', startStopImg, {
+      frameWidth: 274,
+      frameHeight: 64
+    });
+    this.load.spritesheet('speedUp', speedUpImg, {
+      frameWidth: 274,
+      frameHeight: 64
+    });
+    this.load.spritesheet('speedDown', speedDownImg, {
+      frameWidth: 274,
+      frameHeight: 64
+    });
+    this.load.spritesheet('buttons', buttonsImg, {
+      frameWidth: 64,
+      frameHeight: 64
+    });
+    this.load.spritesheet('statusLight', statusImg, {
+      frameWidth: 32,
+      frameHeight: 32
+    });
+    this.load.image('weather', weatherImg);
+    this.load.image('person', personImg);
+    this.load.image('port', portImg);
+  }
+
+  create() {
+    init(this);                   // initialize... do we need this?
+    sceneObj = this;  // setting sceneObj for later use by outside
+
+    this.add.image(500, 328, 'channel'); // 727 * 371
+
+    this.platforms = this.physics.add.staticGroup();
+
+    // upper ground
+    this.platforms.create(800, 16, 'ground').setScale(4).refreshBody();
+    this.platforms.create(508, 92, 'port').setScale(0.8).refreshBody();
+    this.add.image(498, 92, 'person');
+    this.peopleUpperText = this.add.text(508, 83, this.peopleUpper, {
+      fontSize: '22px',
+      fill: '#000'
+    });
+
+    // lower ground
+    this.platforms.create(800, 660, 'ground').setScale(4).refreshBody();
+    this.platforms.create(508, 584, 'port').setScale(0.8).refreshBody();
+    this.add.image(498, 584, 'person');
+    this.peopleLowerText = this.add.text(508, 575, this.peopleLower, {
+      fontSize: '22px',
+      fill: '#000'
+    });
+
+    // add right bar
+    var rect = new Phaser.Geom.Rectangle(1000, 80, 280, 800);
+    this.graphics = this.add.graphics({
+      fillStyle: {
+        color: 0xffffff
+      }
+    });
+    this.graphics.fillRectShape(rect);
+    this.graphics.setDepth(1);
+    this.graphics.lineStyle(4, 0x000, 1);
+    this.graphics.strokeRect(1000, 80, 278, 60);
+    this.graphics.strokeRect(1000, 140, 278, 160);
+    this.graphics.strokeRect(1000, 300, 278, 218);
+    this.graphics.strokeRect(1000, 518, 278, 200);
+
+    // add graphics for primary halo area
+    this.graphicsBoundary = this.add.graphics({
+      fillStyle: {
+        color: 0xffffff
+      }
+    });
+
+    // create buttons and assign
+    this.startStop = this.add.sprite(200, 660, 'startStop', 0);
+    this.speedUp = this.add.sprite(500, 640, 'speedUp', 0).setScale(0.5, 0.5);
+    this.speedDown = this.add.sprite(500, 680, 'speedDown', 0).setScale(0.5, 0.5);
+    this.speaker = this.add.sprite(700, 660, 'buttons', 3);
+    this.mic = this.add.image(800, 660, 'buttons', 0);
+    this.tools = this.add.image(900, 660, 'buttons', 6);
+
+    this.startStop.setInteractive({
+        useHandCursor: true
+      })
+      .on('pointerdown', () => this.startStopPushedDown(this))
+      .on('pointerover', () => this.startStop.setFrame((this.speed === 0) ? 1 : 2))
+      .on('pointerout', () => this.startStop.setFrame((this.speed === 0) ? 0 : 3))
+      .on('pointerup', () => this.startStopPushedUp(this));
+
+    this.speedUp.setInteractive({
+        useHandCursor: true
+      })
+      .on('pointerdown', () => this.speedUpPushedDown(this))
+      .on('pointerover', () => this.speedUp.setFrame(1))
+      .on('pointerout', () => this.speedUp.setFrame(0))
+      .on('pointerup', () => this.speedButtonPushedUp(this.speedUp));
+
+    this.speedDown.setInteractive({
+        useHandCursor: true
+      })
+      .on('pointerdown', () => this.speedDownPushedDown(this))
+      .on('pointerover', () => this.speedDown.setFrame(1))
+      .on('pointerout', () => this.speedDown.setFrame(0))
+      .on('pointerup', () => this.speedButtonPushedUp(this.speedDown));
+
+    this.speaker.setInteractive({
+        useHandCursor: true
+      })
+      .on('pointerdown', () => this.speakerButtonPushedDown(this.speaker))
+      .on('pointerover', () => this.speaker.setFrame(4))
+      .on('pointerout', () => this.speaker.setFrame(3))
+      .on('pointerup', () => this.speakerButtonPushedUp(this.speaker));
+
+    this.mic.setInteractive({
+        useHandCursor: true
+      })
+      .on('pointerdown', () => this.mic.setFrame(2))
+      .on('pointerover', () => this.mic.setFrame(1))
+      .on('pointerout', () => this.mic.setFrame(0))
+      .on('pointerup', () => this.mic.setFrame(1)); // pointerout but still down(?)
+
+    this.tools.setInteractive({
+        useHandCursor: true
+      })
+      .on('pointerdown', () => this.toolsButtonPushedDown(this.tools))
+      .on('pointerover', () => this.tools.setFrame(7))
+      .on('pointerout', () => this.tools.setFrame(6))
+      .on('pointerup', () => this.toolsButtonPushedUp(this.tools));
+
+    this.ferry = new Ferry(this, 508, 548, 'ferry');
+    this.physics.add.collider(this.ferry, this.platforms, this.hitPlatform, null, this);
+
+    // keyboard process
+    this.cursors = this.input.keyboard.createCursorKeys();
+    this.input.keyboard.on('keyup', function (event) {
+      console.log(event, event.keyCode);
+      if (event.keyCode >= 49 && event.keyCode <=52) {  // num 1 to 4
+        scenario = event.keyCode - 49;
+        sceneObj.gameOver(-1, sceneObj);
+      }
+
+      if (event.keyCode === 37) { // arrow left
+        speedFactor = (speedFactor < 2) ? 1 : speedFactor - 1;
+        speedRatio = speedFactor * speedRatioOriginal;
+      }
+
+      if (event.keyCode === 39) { // arrow right
+        speedFactor = (speedFactor > 3) ? 4 : speedFactor + 1;
+        speedRatio = speedFactor * speedRatioOriginal;
+      }
+
+      if (event.keyCode === 32) { // space
+        sceneObj.setSpeed((sceneObj.ferry.speed === 0) ? sceneObj.ferry.ferryDirection * sceneObj.ferry.ferryStartSpeed : 0, sceneObj);
+      }
+    }
+    );
+
+    // create ships - 4 ships and 5 kayaks
+    this.ships = this.physics.add.group();
+    for(var i=0; i<9; i++) {
+      var ship, ship2, x, y, dir, shipImage, shipScale, velocity;
+      if (i< 2 || i >=4 && i <=5)  { // ship to go rightward
+        dir = 1;
+        x = Phaser.Math.Between(-rightX / 4, -adjustX);
+      } else { // ship to go leftward
+        dir = -1;
+        x = Phaser.Math.Between(rightX + adjustX, rightX * 5 / 4);
+      }
+
+      if (i<4) {
+        shipScale =  Phaser.Math.Between(20, 30) / 100;
+        velocity = Phaser.Math.Between(2, 5) ;
+        shipImage = 'boat';
+        if (i>1) velocity = -velocity;
+      } else { // kayak
+        shipImage = 'kayak';
+        shipScale = 0.15;
+        velocity = Phaser.Math.Between(1, 3);
+        if (i>5) velocity = -velocity;
+      }
+
+      ship = new Ship(this, x, y, shipImage);
+
+      if (i>=4) ship.kayak = true;
+
+      ship.y = y = this.findAvailable(ship);
+      //ship.setScale(shipScale);
+      //ship.setVelocityX(velocity);
+
+      ship.shipDirection = dir;
+      ship.shipSpeed = velocity;
+      ship.currentSpeed = velocity;
+      ship.shipScale = shipScale;
+      console.log(shipImage, x, y, shipScale, dir, velocity, ship.timeSlowDown);
+      this.ships.add(ship, true);
+      //console.log(ships2);
+    }
+
+    this.ships.children.iterate(function (child) {
+      child.setVelocityX( child.shipSpeed * speedRatio );
+      if (child.shipDirection === 1) {
+        child.setFrame(1);
+      }
+      child.setScale(child.shipScale);
+    });
+
+    this.physics.add.collider(this.ships, this.platforms);
+
+    this.add.text(32, 24, 'AutoFerry Control Simulation Game', {
+      fontSize: '32px'
+    });
+
+    this.add.text(staticTextX, 24, 'Scenario', { fontSize: '32px' });
+    this.scenarioText = this.add.text(staticResultX - 40, 24, scenario, { fontSize: '32px' });
+
+    this.addStaticText(staticTextX, 100, "Camera", this);
+    this.add.sprite(staticResultX, 110, 'statusLight', 0).setScale(0.7, 0.7).setDepth(1);
+    this.addStaticText(staticTextX, 160, "Thruster A", this);
+    this.thrusterA = this.add.sprite(staticResultX, 170, 'statusLight', 0).setScale(0.7, 0.7);
+    this.thrusterA.setDepth(1);
+    this.addStaticText(staticTextX, 192, "Thruster B", this);
+    this.thrusterB = this.add.sprite(staticResultX, 202, 'statusLight', 0).setScale(0.7, 0.7);;
+    this.thrusterB.setDepth(1);
+    this.addStaticText(staticTextX, 224, "Thruster C", this);
+    this.thrusterC = this.add.sprite(staticResultX, 234, 'statusLight', 0).setScale(0.7, 0.7);;
+    this.thrusterC.setDepth(1);
+    this.addStaticText(staticTextX, 256, "Thruster D", this);
+    this.thrusterD = this.add.sprite(staticResultX, 266, 'statusLight', 0).setScale(0.7, 0.7);;
+    this.thrusterD.setDepth(1);
+    this.addStaticText(staticTextX, 320, "Ferry Speed", this);
+    this.speedText = this.add.text(staticResultX - 30, 320, '0 kn', {
+      fontSize: '24px',
+      fill: '#000'
+    });
+    this.speedText.setDepth(1);
+    this.addStaticText(staticTextX, 352, 'Passenger #', this);
+    this.loadText = this.add.text(staticResultX - 30, 352, '0', {
+      fontSize: '24px',
+      fill: '#000'
+    });
+    this.loadText.setDepth(1);
+    this.addStaticText(staticTextX, 384, 'Wind Speed', this);
+    // remove it because of flickers...-_-
+    //passengerText = this.add.bitmapText(ferry.x - 5, ferry.y - 4, 'font', '0', 10 ); // { fontSize: '18px', fill: '#fff' });
+
+    if (scenario === 4) this.windSpeed = 20;
+    this.windSpeedText = this.add.text(staticResultX - 30, 384, this.windSpeed + ' kn', {
+      fontSize: '24px',
+      fill: '#000'
+    });
+    this.windSpeedText.setDepth(1);
+    this.weatherText = this.add.text(staticTextX, 416, 'Weather:', {
+      fontSize: '24px',
+      fill: '#000'
+    });
+    this.weatherText.setDepth(1);
+    this.weatherImage = this.add.image(1180, 464, 'weather').setDepth(1);
+    this.addStaticText(staticTextX, 538, "Emergency Status:", this);
+
+    // emergency from passengers
+    this.emergency = this.add.sprite(staticResultX - 80, 585, 'statusLight', 0).setScale(0.7, 0.7).setDepth(1);
+    this.addStaticText(staticTextX, 610, "Communications:", this);
+    this.emergencyText = this.add.text(staticTextX, 663, "", { fontSize: '24px', fill: '#000' });
+    this.emergencyText.setDepth(1);
+    this.graphics.strokeRect(staticTextX - 5, 645, 260, 60);
+
+    // big message in the center
+    this.msgCenter = this.add.text(300, 290, "Scenario " + scenario, { fontSize: '64px',  fill: '#000' });
+
+    this.cameras.main.backgroundColor.setTo(128, 128, 128);
+    this.physics.add.collider(this.ferry, this.ships, this.hitShip, null, this);
+  //  this.physics.add.collider(ferry, shipsLeft, hitShip, null, this);
+  //  this.physics.add.collider(ferry, kayaks, hitShip, null, this);
+  //  this.physics.add.collider(ferry, kayaksLeft, hitShip, null, this);
+    this.timeText = this.add.text(800, 24, '5:00', { fontSize: '32px' });
+
+    // reset camera effects
+    this.cameras.main.resetFX();
+  }
+
+  update(time, delta) {
+    // console.log(time, delta);
+    this.timePassed += delta *  speedFactor;
+    let timeElapsed = Math.floor(this.timePassed / 1000); // 1 sec interval
+    let timeElapsed500 = Math.floor(this.timePassed / 500); // 0.5 sec interval
+    this.timeVelocityChange -= delta * speedFactor;
+
+    this.setTime(timeElapsed);
+
+    if (timeElapsed === 2) {
+      this.msgCenter.setText("");
+    }
+
+    if (!this.scenarioActivated) {
+      if (scenario === 5 && this.cross === 1 && this.ferry.y >= upY + 35 * 2) {
+        this.scenarioActivated = true;
+
+        this.time.delayedCall(250, function () {
+          this.cameras.main.fadeOut(250);
+        }, [], this);
+
+        this.time.delayedCall(500, function () {
+          this.cameras.main.fadeIn(250);
+          this.ships.children.iterate(function (child) {
+            if (child.y >= upY + 35 * 3 && child.kayak) {
+              console.log(child.x, this.ferry.x);
+              child.x = this.ferry.x; //  - ferry.displayHeight - child.displayWidth / 2;
+              child.setVelocityX(0);
+            }
+          });
+        }, [], this);
+
+        this.time.delayedCall(15500, function () {
+          this.ships.children.iterate(function (child) {
+            if (child.y >= upY + 35 * 3 && child.kayak) {
+              child.setVelocityX(child.shipSpeed * speedRatio);
+            }
+          });
+        }, [], this);
+      }
+      else if (scenario === 3 && this.cross === 1 && this.ferry.y >= upY + 35 * 3) {
+        this.scenarioActivated = true;
+        this.emergency.setFrame(2);
+        this.emergencyText.setText("Please Stop!!!!!");
+        this.graphics.lineStyle(4, 0xFF0000, 1.0);
+        this.graphics.strokeRect(staticTextX - 5, 645, 260, 60);
+        this.timeScenarioActivated = this.timePassed;
+        this.stopRequested = true;
+      } else if (scenario === 2 && timeElapsed === 30) {
+        this.scenarioActivated = true;
+        this.ACSFailed = true;
+        this.maintenanceNeeded = true;
+        this.timeACSFailed = this.timePassed;
+      }
+    }
+
+    if (!this.gameover && this.stopRequested && this.timePassed - this.cenarioActivated >= 10000) {
+        this.gameOver(6, this);  // emergency stop requested...but,,, failed
+    }
+
+    if (!this.thrusterFailed && this.ACSFailed && this.timePassed - this.timeACSFailed >= 30000) {
+      this.thrusterB.setFrame(2);
+      this.thrusterFailed = true;
+    }
+
+    //console.log(gameover, maintenanceCalled, ACSFailed, timeElapsed - timeACSFailed);
+    if (!this.gameover && !this.maintenanceCalled && this.ACSFailed && this.timePassed - this.timeACSFailed >= 40000) {
+      this.gameOver(5, this);  // ACS FAiled and One Thruster failed and no maintenance called
+    }
+
+    // start the engine with strong wind
+    if (this.falseStartWind && this.engineFailed < 3) {
+      if (this.engineFailed === 0 && this.timePassed - this.timeFalseStart > 5000) { // after 5 seconds, first thruster fails(red)
+        // engine failure
+        this.thrusterA.setFrame(2);
+        this.engineFailed = 1;
+      } else if (this.engineFailed === 1 && this.timePassed - this.timeFalseStart > 15000) {
+        this.thrusterB.setFrame(1);
+        this.engineFailed = 2;
+      } else if (this.engineFailed === 2 && this.timePassed - this.timeFalseStart > 20000) {
+        this.thrusterB.setFrame(2);
+        this.engineFailed = 3;
+        this.timeEngineFailed = this.timePassed;
+      }
+    }
+
+    // if engine failed, you cannot move at all
+    if (this.engineFailed === 3) {
+      this.setSpeed(0);
+
+      if (!this.gameover && this.maintenanceCalled) {
+        this.gameOver(8, this);
+      }
+
+      if (!this.gameover && this.timePassed - this.timeEngineFailed > 10000) {
+        this.gameOver(7, this);
+      }
+    }
+
+    // check time over
+    if (timeElapsed >= 300 && !this.gameover) {
+      this.gameOver(1, this);  // time out...
+    }
+
+    // adjust the ferry real speed with current set speed
+    this.timeVelocityChange = this.ferry.adjustSpeed(this.timeVelocityChange, speedRatio);
+
+    // maintenance called check
+    if (this.atDock && this.maintenanceCalled && !this.gameover) {
+      // check properly or not properly
+      if (this.maintenanceNeeded) {
+        this.score += this.ferryLoad / 50;
+        this.ferryLoad = 0;
+        this.gameOver(4, this);  // good job!!!
+      } else
+        this.gameOver(5, this); // no needed maintenance...(?)
+    }
+
+    // dock loading/unloading simulation
+    if (this.atDock && timeElapsed500 != this.preTimeElapsed500) {
+      this.preTimeElapsed500 = timeElapsed500;
+      //console.log("Loading", this.loading, this.ferryLoad, this.ferryDirection, this.peopleLower);
+
+      if (this.loading == false) {
+        if (this.ferryLoad > 0) {
+          this.ferryLoad -= 50;
+          this.score++;
+        }
+
+        if (this.ferryLoad == 0) {
+          this.loading = true;
+          if (this.score === 40) {
+            totalScore += this.score;
+            this.gameOver(2, this);
+          }
+        }
+      } else {
+        if (this.ferry.ferryDirection === -1 && this.ferryLoad < 600 && this.peopleLower > 0) {
+          this.peopleLower--;
+          this.peopleLowerText.setText(this.peopleLower);
+          this.ferryLoad += 50;
+        }
+        if (this.ferry.ferryDirection === 1 && this.ferryLoad < 600 && this.peopleUpper > 0) {
+          this.peopleUpper--;
+          this.peopleUpperText.setText(this.peopleUpper);
+          this.ferryLoad += 50;
+        }
+      }
+
+      this.loadText.setText(this.ferryLoad / 50);
+
+      if (featurePasengerText) {
+        if (this.ferryLoad >= 500) { // adjust location of text for two digits
+          this.passengerText.x = this.ferry.x - 10;
+        } else {
+          this.passengerText.x = this.ferry.x - 5;
+        }
+        this.passengerText.setText(this.ferryLoad / 50);
+      }
+    }
+    // move the passenger text with ferry
+    if (featurePasengerText && this.passengerText.y !== this.ferry.y - 4)
+      this.passengerText.y = this.ferry.y - 4;
+
+    // haloCircle
+    var circle = new Phaser.Geom.Circle(this.ferry.x, this.ferry.y, haloRadius);
+    var circle2 = new Phaser.Geom.Circle(this.ferry.x, this.ferry.y, stopRadius);
+    var circleHorn = new Phaser.Geom.Circle(this.ferry.x, this.ferry.y, hornRadius);
+
+    this.haloStatus = 0; // reset haloStatus
+    this.ships.children.iterate(function (child) {
+      var rectBounds = child.getBounds();
+      sceneObj.haloCheck(circle, circle2, rectBounds, child);
+      if (child.shipDirection === 1 && child.x > rightX * 5 / 4) {
+        child.x = Phaser.Math.Between(-rightX / 4, -adjustX);
+        if (!child.kayak) {
+          var tmpScale = Phaser.Math.Between(20, 30) / 100;
+          child.setScale(tmpScale);
+          child.shipSpeed = Phaser.Math.Between(2, 5) * child.shipDirection;
+          child.currentSpeed = child.shipSpeed;
+        }
+      } else if (child.shipDirection === -1 && child.x < -rightX / 4) {
+        child.x = Phaser.Math.Between(adjustX + rightX, rightX * 5 / 4);
+        if (!child.kayak) {
+          var tmpScale = Phaser.Math.Between(20, 30) / 100;
+          child.setScale(tmpScale);
+          child.shipSpeed = Phaser.Math.Between(2, 5) * child.shipDirection;
+          child.currentSpeed = child.shipSpeed;
+        }
+      }
+      if (child.kayak) { // kayak has a chance of speed change
+        child.timeChangeSpeed -= delta;
+        if (child.timeChangeSpeed < 0 && Phaser.Math.Between(0, 1) === 1) { // 50% chance to change speed
+          //console.log("kayak speed changed from ", child.shipSpeed);
+          child.shipSpeed = Phaser.Math.Between(0, 3) * child.shipDirection;
+          child.currentSpeed = child.shipSpeed;
+          //console.log("to ", child.shipSpeed);
+          child.timeChangeSpeed = Phaser.Math.Between(5000, 10000); // next delta should be between 5 and 10 seconds
+        }
+      }
+
+      // speaker warning
+      sceneObj.processTasks(child, circleHorn, rectBounds, delta);
+
+      // when speedRatio changed...this affects all the boats speed
+      child.setVelocityX(child.shipSpeed * speedRatio);
+    });
+
+    this.graphicsBoundary.clear();
+    if (this.haloStatus === 0)
+      this.graphicsBoundary.lineStyle(1, 0x008000, 1);
+    else if (this.haloStatus >= 1)
+      this.graphicsBoundary.lineStyle(1, 0xe0e000, 1);
+
+    if (this.ACSFailed) {
+      this.graphicsBoundary.lineStyle(1, 0xc00000, 1);
+      //setSpeed(0, this);
+    }
+
+    this.graphicsBoundary.strokeCircle(this.ferry.x, this.ferry.y, haloRadius);
+    //graphicsBoundary.lineStyle(1, 0x008080, 1);
+    //graphicsBoundary.strokeCircle(ferry.x, ferry.y, stopRadius);
+
+    // speed control by keyboard
+    if (this.cursors.up.isDown) {
+      this.setSpeed((this.ferry.speed - 1 < -30) ? -30 : this.ferry.speed - 1, this);
+    } else if (this.cursors.down.isDown) {
+      this.setSpeed((this.ferry.speed + 1 > 30) ? 30 : this.ferry.speed + 1, this);
+    }
+  }
+
+  // check halo radius and activate ACS if needed
+  haloCheck(circle, circle2, rect, obj) {
+    if (this.haloStatus == 0 && Phaser.Geom.Intersects.CircleToRectangle(circle, rect)) {
+      this.haloStatus = 1;
+
+      // for scenario 1 all ship doesn't yield
+      if (scenario !==1 && obj.shipDirection * this.ferry.ferryDirection === -1 && obj.shipACS) {  // from left side of the this.ferry
+        if ((this.ferry.ferryDirection === -1 && obj.y - obj.displayHeight / 2 < this.ferry.y + this.ferry.displayHeight / 2) ||   // this.ferry down to up
+             (this.ferry.ferryDirection === 1 && obj.y + obj.displayHeight / 2 > this.ferry.y - this.ferry.displayHeight / 2) ) {  // this.ferry up to down
+          // left to right
+          if ((obj.shipDirection === 1 && obj.x + obj.displayWidth / 2 < this.ferry.x - stopRadius / 2 ) ||   // ship left to right
+              (obj.shipDirection === -1 && obj.x - obj.displayWidth / 2 > this.ferry.x + stopRadius / 2 )) { // ship right to left
+            obj.body.moves = false;
+            obj.stoppedByACS = true;
+          }
+        }
+      }
+      //console.log(obj,  obj.body.moves);
+
+      if (Phaser.Geom.Intersects.CircleToRectangle(circle2, rect)) {
+        this.haloStatus = 2;
+        this.setSpeed(0); // stop the ferry
+      }
+    }
+    if (this.haloStatus === 0 && obj.stoppedByACS) {
+      obj.body.moves = true;
+      obj.stoppedByACS = false;
+    }
+  }
+
+  // find the available space for ships to avoid collision by each other
+  findAvailable(obj) {
+    var i = Phaser.Math.Between(0, 8);
+
+    var result = this.checkAvailableSpace(i, obj);
+
+    if (result !== -1) return result * 35 + upY;
+
+    for(var j=i; j<=i+10;j++) {
+      var result = this.checkAvailableSpace(j % 9, obj);
+
+      if (result !== -1) return result * 35 + upY;
+    }
+    return -1;
+  }
+
+  checkAvailableSpace(i, obj) {
+    if (this.occupied[i] === null) {
+      this.occupied[i] = obj;
+      return i;
+    }
+    return -1;
+  }
+
+  freeOccupiedSpace(y) {
+    this.occupied[(y-upY) / 35] = null;
+  }
+
+  // speaker warning activating...
+  processTasks(child, circleHorn, rectBounds, delta) {
+    if (this.speakerWarning && this.ferry.ferryDirection * child.shipDirection === -1 && Phaser.Geom.Intersects.CircleToRectangle(circleHorn, rectBounds)) {
+      //child.yieldToFerry = true;
+      //child.body.moves = false;
+
+      console.log("Speaker debug", child, child.timeSlowDown, child.shipSpeed, delta, speedFactor);
+
+      // only collision possible boats affected by speaker button
+      if ((this.ferry.ferryDirection === -1 && child.y - child.displayHeight / 2 < this.ferry.y + this.ferry.displayHeight / 2) || // ferry down to up
+        (this.ferry.ferryDirection === 1 && child.y + child.displayHeight / 2 > this.ferry.y - this.ferry.displayHeight / 2)) { // ferry up to down
+        // left to right
+        if ((child.shipDirection === 1 && child.x + child.displayWidth / 2 < this.ferry.x - stopRadius / 2) || // ship left to right
+          (child.shipDirection === -1 && child.x - child.displayWidth / 2 > this.ferry.x + stopRadius / 2)) { // ship right to left
+          child.timeSlowDown -= delta * speedFactor;
+
+          while (child.timeSlowDown <= 0) {
+            child.timeSlowDown += 100;
+            child.shipSpeed = (Math.abs(child.shipSpeed) <= shipAccel) ? 0 : child.shipSpeed - shipAccel * child.shipDirection;
+          }
+        }
+      }
+      //console.log(child.shipSpeed);
+    } else if (!child.stoppedByACS) {
+      //child.body.moves = true;
+      child.timeSlowDown -= delta * speedFactor;
+      while (child.timeSlowDown <= 0) {
+        child.timeSlowDown += 100;
+        if (Math.abs(child.shipSpeed) < Math.abs(child.currentSpeed)) { // before
+          child.shipSpeed += shipAccel * child.shipDirection;
+        }
+      }
+    }
+  }
+
+  // display the currently reamined time
+  setTime(timeElasped) {
+    this.timeLeft = 300 - timeElasped;
+    var minutes = this.timeLeft % 60;
+    var hour = (this.timeLeft - minutes) / 60;
+    if (minutes == 0) {
+      this.timeText.setText(hour + ":00");
+    } else
+      this.timeText.setText(hour + ":" + minutes);
+  }
+
+  startStopPushedDown(obj) {
+    obj.startStop.setFrame((this.ferry.speed === 0) ? 2 : 1);
+    this.setSpeed((this.ferry.speed === 0) ? this.ferry.ferryDirection * this.ferry.ferryStartSpeed : 0, obj);
+  }
+
+  startStopPushedUp(obj) {
+    setTimeout(function () {
+      obj.startStop.setFrame((this.speed === 0) ? 0 : 3);
+    }, 200);
+  }
+
+  speedUpPushedDown(obj) {
+    //console.log(this, startStop, obj);
+    obj.speedUp.setFrame(2);
+    //console.log("Button Active", obj.speed, this.speed);
+    this.setSpeed((Math.abs(this.ferry.speed) >= this.ferry.ferryMaxSpeed) ? this.ferry.ferryMaxSpeed * this.ferry.ferryDirection : this.ferry.speed + this.ferry.ferryDirection, obj);
+  }
+
+  speedDownPushedDown(obj) {
+    //console.log(this, startStop, obj);
+    obj.speedDown.setFrame(2);
+    //console.log("Button Active", obj.speed, this.speed);
+    this.setSpeed((this.ferry.speed === 0) ? 0 : this.ferry.speed - this.ferry.ferryDirection, obj);
+  }
+
+  speedButtonPushedUp(obj) {
+    setTimeout(function () {
+      obj.setFrame(0);
+    }, 200);
+    //obj.startStop.setFrame(0);
+    //console.log("Button Inactive");
+  }
+
+  speakerButtonPushedDown(obj) {
+    obj.setFrame(5);
+    this.speakerWarning = true;
+  }
+
+  speakerButtonPushedUp(obj) {
+    this.speakerWarning = false;
+    setTimeout(function () {
+      obj.setFrame(3);
+    }, 200);
+  }
+
+  toolsButtonPushedDown(obj) {
+    obj.setFrame(8);
+    this.maintenanceCalled = true;
+  }
+
+  toolsButtonPushedUp(obj) {
+    setTimeout(function () {
+      obj.setFrame(6);
+    }, 200);
+  }
+
+  // Add static text which doesn't change at all
+  addStaticText(x, y, msg, scene) {
+    var variable = scene.add.text(x, y, msg, {
+      fontSize: '24px',
+      fill: '#000'
+    });
+    variable.setDepth(1);
+  }
+
+
+  // hit other side dock
+  hitPlatform(ferry) {
+    //this.physics.pause();
+    ferry.ferryDirection *= -1;
+    ferry.ferrySpeed = 0; // immediately stop the ferry (one exception)
+    this.setSpeed(0, this);
+
+    this.atDock = true;
+    if (this.ferryLoad > 0) this.loading = false;
+    // decreasea the load and increase the load
+    this.cross++;
+  }
+
+  // when ferry is hit by ships
+  hitShip(ferry, ship) {
+    ferry.setTint(0xff0000);
+
+    if (!this.gameover)
+      this.gameOver(0, this);
+  }
+
+  // process game over
+  gameOver(success, scene) {
+    this.gameover = true;
+
+    console.log("Game Over", this, scene);
+    // shake the camera if collision or engine fails...
+    var msg = "Game Over!!!";
+    switch(success) {
+      case 0:
+        msg = "Crashed!!!!!";
+        scene.cameras.main.shake(250);
+        break;
+      case 1:
+        msg = "Time Over!!!";
+        break;
+      case 2:
+        msg ="Good Job!!!!!";
+        break;
+  //    case 3:
+  //      msg ="Good Job!!!!!";
+  //      break;
+      case 4:
+        msg ="Out of Service!!!";
+        break;
+      case 5:
+        msg ="Maintenance???";
+        break;
+      case 6:
+        msg ="Stop Requested!!!";
+        break;
+      case 7:
+        msg ="Engine Failed!!!";
+        break;
+      case 8:
+        msg ="Too Windy!!!!!";
+        break;
+      case -1:
+        msg = "To Scenario " + (scenario + 1);
+        break;
+    }
+
+    scene.msgCenter.setText(msg);
+
+    console.log(scenario++); // yeah global variable still remaining....
+    totalScore += this.score;
+
+    // restart game
+    if (success === -1) {
+      // fade camera
+      scene.time.delayedCall(500, function () {
+        scene.cameras.main.fade(500);
+      }, [], scene);
+
+      scene.time.delayedCall(1000, function () {
+        scene.scene.restart();
+      }, [], scene);
+    } else  if (scenario < 5) {
+      // fade camera
+      scene.time.delayedCall(4500, function () {
+        scene.cameras.main.fade(500);
+      }, [], scene);
+
+      scene.time.delayedCall(5000, function () {
+        console.log("Restart", this, scene);
+        scene.scene.restart();
+      }, [], scene);
+
+    } else {  // last scenario 4...
+       console.log(scenario);
+       scene.time.delayedCall(4000, function () {
+         // reset camera effects
+         scene.cameras.main.resetFX();
+         this.msgCenter.setText("Game Over! Thank you!");
+         this.msgCenter.x = 100;
+      }, [], scene);
+    }
+  }
+
+  // set the speed of the ferry
+  setSpeed(speed) {
+    if (this.ferry.speed === 0 && speed !== 0) {
+      this.atDock = false;
+    }
+
+    this.ferry.speed = speed;
+    this.speedText.setText(Math.abs(speed) + " kn");
+    this.startStop.setFrame((speed === 0) ? 0 : 3);
+
+    if (speed !== 0 && this.windSpeed > 15 && !this.falseStartWind) {
+      this.falseStartWind = true;
+      this.timeFalseStart = this.timePassed;
+      console.log("Start with Strong Wind...");
+    }
+
+    if (speed === 0 && this.stopRequested) {
+      this.stopRequested = false;
+      this.emergency.setFrame(0);
+      this.emergencyText.setText("Thank you!!!!!");
+      this.graphics.lineStyle(4, 0x000000, 1.0);
+      this.graphics.strokeRect(staticTextX - 5, 645, 260, 60);
+    }
+  }
+}

@@ -12,4 +12,4 @@ After clone the repo, use "npm install" and then "npm start" to start the develo
 
 # Deploying Code
 
-"npm run build" will create new distribution file in the dist folder. ~At the current time, we need to manually copy index.html, index.css and assets/ folder into dist and then upload it to your deployment server.~
+"npm run build" will create new distribution file in the dist folder. All the files inside the dist folder can then be uploaded into your deployment server.

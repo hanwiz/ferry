@@ -2,6 +2,7 @@ const webpack = require("webpack");
 const path = require("path");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const CleanWebpackPlugin = require("clean-webpack-plugin");
+const CopyWebpackPlugin = require("copy-webpack-plugin");
 
 module.exports = {
   mode: "development",
@@ -36,6 +37,11 @@ module.exports = {
     new HtmlWebpackPlugin({
       template: "./ferry.html",
       filename: "./ferry.html"
-    })
+    }),
+    new CopyWebpackPlugin([
+      { from: './index.html', to: 'index.html' },
+      { from: './index.css', to: 'index.css' },
+      { from: './assets/game.png', to: 'assets/game.png' },
+    ]),
   ]
 };
